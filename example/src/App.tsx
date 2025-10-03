@@ -17,7 +17,7 @@ import type {
 
 import { Sidebar } from "./Sidebar";
 import { Spinner } from "./Spinner";
-import { testHighlights as _testHighlights } from "./test-highlights";
+import { testHighlights as _testHighlights, martinFierroTestHighlights } from "./test-highlights";
 
 import "./style/App.css";
 import "../../dist/style.css";
@@ -46,6 +46,7 @@ const HighlightPopup = ({
 
 const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
 const SECONDARY_PDF_URL = "https://arxiv.org/pdf/1604.02480";
+const NEW_PDF_URL = "http://localhost:3003/react-pdf-highlighter/hernandez_jose_-_el_gaucho_martin_fierro.pdf";
 
 export function App() {
   const searchParams = new URLSearchParams(document.location.search);
@@ -62,19 +63,24 @@ export function App() {
 
   const toggleDocument = () => {
     const newUrl =
-      url === PRIMARY_PDF_URL ? SECONDARY_PDF_URL : PRIMARY_PDF_URL;
+      url === PRIMARY_PDF_URL ? NEW_PDF_URL : PRIMARY_PDF_URL;
     setUrl(newUrl);
+    if (newUrl == NEW_PDF_URL) {
+      setHighlights(martinFierroTestHighlights);
+      return;
+    }
     setHighlights(testHighlights[newUrl] ? [...testHighlights[newUrl]] : []);
   };
 
   const scrollViewerTo = useRef((highlight: IHighlight) => {});
 
-  const scrollToHighlightFromHash = useCallback(() => {
+  const scrollToHighlightFromHash = () => {
     const highlight = getHighlightById(parseIdFromHash());
+    //console.log("👿", highlight);
     if (highlight) {
       scrollViewerTo.current(highlight);
     }
-  }, []);
+  };
 
   useEffect(() => {
     window.addEventListener("hashchange", scrollToHighlightFromHash, false);
@@ -88,15 +94,20 @@ export function App() {
   }, [scrollToHighlightFromHash]);
 
   const getHighlightById = (id: string) => {
+    //console.log("👿👿", highlights, id);
     return highlights.find((highlight) => highlight.id === id);
   };
 
   const addHighlight = (highlight: NewHighlight) => {
-    console.log("Saving highlight", highlight);
-    setHighlights((prevHighlights) => [
-      { ...highlight, id: getNextId() },
-      ...prevHighlights,
-    ]);
+    //console.log("Saving highlight", highlight);
+    setHighlights((prevHighlights) => {
+      const newState = [
+        { ...highlight, id: getNextId() },
+        ...prevHighlights,
+      ];
+      console.log("📜 Current state:", newState);
+      return newState;
+    });
   };
 
   const updateHighlight = (

@@ -19,23 +19,24 @@ export function Sidebar({
 }: Props) {
   return (
     <div className="sidebar" style={{ width: "25vw" }}>
-      <div className="description" style={{ padding: "1rem" }}>
+      <div className="description" style={{ padding: "1rem", backgroundColor: "#212121ff" }}>
         <h2 style={{ marginBottom: "1rem" }}>
-          react-pdf-highlighter {APP_VERSION}
+          🧙‍♂️ Arcadia .pdf highlighter POC
+          {/* react-pdf-highlighter {APP_VERSION} */}
         </h2>
 
-        <p style={{ fontSize: "0.7rem" }}>
+        {/* <p style={{ fontSize: "0.7rem" }}>
           <a href="https://github.com/agentcooper/react-pdf-highlighter">
             Open in GitHub
           </a>
-        </p>
+        </p> */}
 
-        <p>
+        {/* <p>
           <small>
             To create area highlight hold ⌥ Option key (Alt), then click and
             drag.
           </small>
-        </p>
+        </p> */}
       </div>
 
       <ul className="sidebar__highlights">
