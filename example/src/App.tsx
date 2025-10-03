@@ -46,7 +46,7 @@ const HighlightPopup = ({
 
 const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
 const SECONDARY_PDF_URL = "https://arxiv.org/pdf/1604.02480";
-const NEW_PDF_URL = "http://localhost:3003/react-pdf-highlighter/hernandez_jose_-_el_gaucho_martin_fierro.pdf";
+const NEW_PDF_URL = "/react-pdf-highlighter/hernandez_jose_-_el_gaucho_martin_fierro.pdf";
 
 export function App() {
   const searchParams = new URLSearchParams(document.location.search);
