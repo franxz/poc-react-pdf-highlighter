@@ -19,8 +19,10 @@ import { Sidebar } from "./Sidebar";
 import { Spinner } from "./Spinner";
 import { testHighlights as _testHighlights, martinFierroTestHighlights } from "./test-highlights";
 
+
 import "./style/App.css";
 import "../../dist/style.css";
+import { CLIENT_PDF_URLS } from "./constants";
 
 const testHighlights: Record<string, Array<IHighlight>> = _testHighlights;
 
@@ -50,22 +52,36 @@ const NEW_PDF_URL = "/react-pdf-highlighter/hernandez_jose_-_el_gaucho_martin_fi
 
 export function App() {
   const searchParams = new URLSearchParams(document.location.search);
-  const initialUrl = searchParams.get("url") || PRIMARY_PDF_URL;
+  const initialUrl = searchParams.get("url") || CLIENT_PDF_URLS[0];
 
   const [url, setUrl] = useState(initialUrl);
-  const [highlights, setHighlights] = useState<Array<IHighlight>>(
-    testHighlights[initialUrl] ? [...testHighlights[initialUrl]] : [],
-  );
+  const [highlights, setHighlights] = useState<Array<IHighlight>>(() => {
+    const saved = localStorage.getItem(`highlights:${initialUrl}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return testHighlights[initialUrl] ? [...testHighlights[initialUrl]] : [];
+  });
 
   const resetHighlights = () => {
     setHighlights([]);
+    localStorage.removeItem(`highlights:${url}`);
   };
 
-  const toggleDocument = () => {
-    const newUrl =
-      url === PRIMARY_PDF_URL ? NEW_PDF_URL : PRIMARY_PDF_URL;
+  const toggleDocument = (index: number) => {
+    const newUrl = CLIENT_PDF_URLS[index];
     setUrl(newUrl);
-    if (newUrl == NEW_PDF_URL) {
+    // Try to load from localStorage first
+    const saved = localStorage.getItem(`highlights:${newUrl}`);
+    if (saved) {
+      try {
+        setHighlights(JSON.parse(saved));
+        return;
+      } catch {}
+    }
+    if (newUrl === "/react-pdf-highlighter/hernandez_jose_-_el_gaucho_martin_fierro.pdf") {
       setHighlights(martinFierroTestHighlights);
       return;
     }
@@ -99,13 +115,11 @@ export function App() {
   };
 
   const addHighlight = (highlight: NewHighlight) => {
-    //console.log("Saving highlight", highlight);
     setHighlights((prevHighlights) => {
       const newState = [
         { ...highlight, id: getNextId() },
         ...prevHighlights,
       ];
-      console.log("📜 Current state:", newState);
       return newState;
     });
   };
@@ -115,7 +129,6 @@ export function App() {
     position: Partial<ScaledPosition>,
     content: Partial<Content>,
   ) => {
-    console.log("Updating highlight", highlightId, position, content);
     setHighlights((prevHighlights) =>
       prevHighlights.map((h) => {
         const {
@@ -135,6 +148,10 @@ export function App() {
       }),
     );
   };
+  // Persist highlights to localStorage whenever they or url change
+  useEffect(() => {
+    localStorage.setItem(`highlights:${url}`, JSON.stringify(highlights));
+  }, [highlights, url]);
 
   return (
     <div className="App" style={{ display: "flex", height: "100vh" }}>
