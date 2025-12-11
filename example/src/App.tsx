@@ -143,72 +143,54 @@ export function App() {
     localStorage.setItem(`highlights:${url}`, JSON.stringify(highlights));
   }, [highlights, url]);
 
-  const sentinelRef = useRef(null);
-
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const onReachEnd = useCallback(() => {
-    console.log("👇 Llegaste al final del PDF");
+  const fadeDuration = 250;
 
-    if (isTransitioningRef.current) return;
+  const doTransition = (newIndex: number, scrollPosition: "top" | "bottom") => {
+    const container = containerRef.current;
+    if (!container) return;
 
-    if (currentIndex < CLIENT_PDF_URLS.length - 1) {
-      isTransitioningRef.current = true;
-      const nextIdx = currentIndex + 1;
-      setCurrentIndex(nextIdx);
-      setUrl(CLIENT_PDF_URLS[nextIdx]);
+    isTransitioningRef.current = true;
+    container.classList.add("pdf-hidden");
 
-      setTimeout(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = 0;
+    setTimeout(() => {
+      setCurrentIndex(newIndex);
+      setUrl(CLIENT_PDF_URLS[newIndex]);
+
+      requestAnimationFrame(() => {
+        if (scrollPosition === "top") {
+          container.scrollTop = 0;
+        } else {
+          container.scrollTop = container.scrollHeight - container.clientHeight;
         }
-        isTransitioningRef.current = false;
-      }, 100);
+
+        // esperar 1 frame para asegurar que el DOM re-renderizó
+        requestAnimationFrame(() => {
+          container.classList.remove("pdf-hidden");
+
+          setTimeout(() => {
+            isTransitioningRef.current = false;
+          }, fadeDuration);
+        });
+      });
+    }, fadeDuration);
+  };
+
+  const onReachEnd = useCallback(() => {
+    if (
+      !isTransitioningRef.current &&
+      currentIndex < CLIENT_PDF_URLS.length - 1
+    ) {
+      doTransition(currentIndex + 1, "top");
     }
   }, [currentIndex]);
 
   const onReachStart = useCallback(() => {
-    console.log("👆 Llegaste al inicio del PDF");
-
-    if (isTransitioningRef.current) return;
-
-    if (currentIndex > 0) {
-      isTransitioningRef.current = true;
-      const prevIdx = currentIndex - 1;
-      setCurrentIndex(prevIdx);
-      setUrl(CLIENT_PDF_URLS[prevIdx]);
-
-      setTimeout(() => {
-        if (containerRef.current) {
-          // Scroll al final del documento anterior
-          containerRef.current.scrollTop =
-            containerRef.current.scrollHeight -
-            containerRef.current.clientHeight;
-        }
-        isTransitioningRef.current = false;
-      }, 100);
+    if (!isTransitioningRef.current && currentIndex > 0) {
+      doTransition(currentIndex - 1, "bottom");
     }
   }, [currentIndex]);
-
-  // 👇 Sentinel + IntersectionObserver para bottom
-  useEffect(() => {
-    if (!sentinelRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) onReachEnd();
-        });
-      },
-      {
-        root: null,
-        threshold: 1,
-      }
-    );
-
-    observer.observe(sentinelRef.current);
-    return () => observer.disconnect();
-  }, [onReachEnd]);
 
   return (
     <div className="App" style={{ display: "flex", height: "100vh" }}>
@@ -220,6 +202,7 @@ export function App() {
 
       <div
         ref={containerRef}
+        className="pdf-transition"
         style={{
           height: "100vh",
           width: "75vw",
@@ -239,7 +222,6 @@ export function App() {
                   scrollViewerTo.current = scrollTo;
 
                   const handleScroll = () => {
-                    // Detectar scroll hacia abajo
                     const isBottom =
                       viewerContainer.scrollTop +
                         viewerContainer.clientHeight >=
@@ -249,7 +231,6 @@ export function App() {
                       onReachEnd();
                     }
 
-                    // Detectar scroll hacia arriba
                     const isTop = viewerContainer.scrollTop === 0;
                     if (isTop) {
                       onReachStart();
@@ -317,9 +298,6 @@ export function App() {
                 }}
                 highlights={highlights}
               />
-
-              {/* 👇 SENTINEL FINAL DEL PDF */}
-              <div ref={sentinelRef} style={{ height: 1 }} />
             </>
           )}
         </PdfLoader>

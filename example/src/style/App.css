@@ -54,11 +54,19 @@ a {
 blockquote {
   padding: 0;
   margin: 0;
-  quotes: "\201c" "\201d";
+  quotes: "\201c""\201d";
 }
 blockquote:before {
   content: open-quote;
 }
 blockquote:after {
   content: close-quote;
+}
+
+.pdf-transition {
+  transition: opacity 0.4s ease;
+}
+
+.pdf-hidden {
+  opacity: 0;
 }
