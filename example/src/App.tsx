@@ -54,6 +54,12 @@ export function App() {
   const initialUrl = searchParams.get("url") || CLIENT_PDF_URLS[0];
 
   const [url, setUrl] = useState(initialUrl);
+  const [currentIndex, setCurrentIndex] = useState(
+    CLIENT_PDF_URLS.indexOf(initialUrl) >= 0
+      ? CLIENT_PDF_URLS.indexOf(initialUrl)
+      : 0
+  );
+
   const [highlights, setHighlights] = useState<Array<IHighlight>>(() => {
     const saved = localStorage.getItem(`highlights:${initialUrl}`);
     if (saved) {
@@ -64,6 +70,8 @@ export function App() {
     return testHighlights[initialUrl] ? [...testHighlights[initialUrl]] : [];
   });
 
+  const isTransitioningRef = useRef(false);
+
   const resetHighlights = () => {
     setHighlights([]);
     localStorage.removeItem(`highlights:${url}`);
@@ -71,6 +79,7 @@ export function App() {
 
   const toggleDocument = (index: number) => {
     const newUrl = CLIENT_PDF_URLS[index];
+    setCurrentIndex(index);
     setUrl(newUrl);
 
     const saved = localStorage.getItem(`highlights:${newUrl}`);
@@ -134,20 +143,54 @@ export function App() {
     localStorage.setItem(`highlights:${url}`, JSON.stringify(highlights));
   }, [highlights, url]);
 
-  // 👇 NUEVO: Sentinel + IntersectionObserver + callback
   const sentinelRef = useRef(null);
+
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const onReachEnd = useCallback(() => {
     console.log("👇 Llegaste al final del PDF");
 
-    // ejemplo simple: saltar al siguiente PDF
-    const idx = CLIENT_PDF_URLS.indexOf(url);
-    const nextIdx = (idx + 1) % CLIENT_PDF_URLS.length;
-    setUrl(CLIENT_PDF_URLS[nextIdx]);
+    if (isTransitioningRef.current) return;
 
-    // podés también concatenar PDFs, cargar más, mostrar loader, etc.
-  }, [url]);
+    if (currentIndex < CLIENT_PDF_URLS.length - 1) {
+      isTransitioningRef.current = true;
+      const nextIdx = currentIndex + 1;
+      setCurrentIndex(nextIdx);
+      setUrl(CLIENT_PDF_URLS[nextIdx]);
 
+      setTimeout(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = 0;
+        }
+        isTransitioningRef.current = false;
+      }, 100);
+    }
+  }, [currentIndex]);
+
+  const onReachStart = useCallback(() => {
+    console.log("👆 Llegaste al inicio del PDF");
+
+    if (isTransitioningRef.current) return;
+
+    if (currentIndex > 0) {
+      isTransitioningRef.current = true;
+      const prevIdx = currentIndex - 1;
+      setCurrentIndex(prevIdx);
+      setUrl(CLIENT_PDF_URLS[prevIdx]);
+
+      setTimeout(() => {
+        if (containerRef.current) {
+          // Scroll al final del documento anterior
+          containerRef.current.scrollTop =
+            containerRef.current.scrollHeight -
+            containerRef.current.clientHeight;
+        }
+        isTransitioningRef.current = false;
+      }, 100);
+    }
+  }, [currentIndex]);
+
+  // 👇 Sentinel + IntersectionObserver para bottom
   useEffect(() => {
     if (!sentinelRef.current) return;
 
@@ -176,11 +219,13 @@ export function App() {
       />
 
       <div
+        ref={containerRef}
         style={{
           height: "100vh",
           width: "75vw",
           position: "relative",
           overflowY: "auto",
+          scrollBehavior: "smooth",
         }}
       >
         <PdfLoader url={url} beforeLoad={<Spinner />}>
@@ -191,7 +236,10 @@ export function App() {
                 enableAreaSelection={(event) => event.altKey}
                 onScrollChange={resetHash}
                 scrollRef={(scrollTo, viewerContainer) => {
+                  scrollViewerTo.current = scrollTo;
+
                   const handleScroll = () => {
+                    // Detectar scroll hacia abajo
                     const isBottom =
                       viewerContainer.scrollTop +
                         viewerContainer.clientHeight >=
@@ -199,6 +247,12 @@ export function App() {
 
                     if (isBottom) {
                       onReachEnd();
+                    }
+
+                    // Detectar scroll hacia arriba
+                    const isTop = viewerContainer.scrollTop === 0;
+                    if (isTop) {
+                      onReachStart();
                     }
                   };
 
@@ -264,7 +318,7 @@ export function App() {
                 highlights={highlights}
               />
 
-              {/* 👇 NUEVO: S I N T I N E L FINAL DEL PDF */}
+              {/* 👇 SENTINEL FINAL DEL PDF */}
               <div ref={sentinelRef} style={{ height: 1 }} />
             </>
           )}

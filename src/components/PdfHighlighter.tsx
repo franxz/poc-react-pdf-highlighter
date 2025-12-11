@@ -1,4 +1,3 @@
-// PdfHighlighter.tsx
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { EventBus, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import type { PDFViewerOptions } from "pdfjs-dist/types/web/pdf_viewer";
@@ -67,10 +66,9 @@ interface Props<T_HT> {
   ) => JSX.Element;
   highlights: Array<T_HT>;
   onScrollChange: () => void;
-  // scrollRef now receives viewer container too (we already call it)
   scrollRef: (
     scrollTo: (highlight: T_HT) => void,
-    viewerContainer?: HTMLElement
+    viewerContainer: HTMLElement
   ) => void;
   pdfDocument: PDFDocumentProxy;
   pdfScaleValue: string;
@@ -82,9 +80,6 @@ interface Props<T_HT> {
   ) => JSX.Element | null;
   enableAreaSelection: (event: MouseEvent) => boolean;
   pdfViewerOptions?: PDFViewerOptions;
-  // NEW: if true, the viewer container will be allowed to expand and the outer
-  // container (your App) will be used for scrolling — this enables stacking PDFs.
-  useExternalScroll?: boolean;
 }
 
 const EMPTY_ID = "empty-id";
@@ -187,7 +182,6 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       new pdfjs.PDFViewer({
         container: this.containerNodeRef.current,
         eventBus: eventBus,
-        // enhanceTextSelection: true, // deprecated.
         textLayerMode: 2,
         removePageBorders: true,
         linkService: linkService,
@@ -413,45 +407,18 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       () => this.renderHighlightLayers()
     );
 
-    // wait for scrolling to finish
     setTimeout(() => {
       this.viewer.container.addEventListener("scroll", this.onScroll);
     }, 100);
   };
 
   onDocumentReady = () => {
-    const { scrollRef, useExternalScroll } = this.props;
+    const { scrollRef } = this.props;
 
     this.handleScaleValue();
 
-    // 👉 Parche para exponer el contenedor real del scroll
     if (scrollRef) {
-      // NOTE: we pass the viewer.container as second arg, so callers can decide what to do.
-      // (Your App uses sentinels on the outer container instead of viewer scroll,
-      //  but having this allows hash->scrollTo to work.)
       scrollRef(this.scrollTo, this.viewer.container);
-    }
-
-    // If user asked to use the outer container for scrolling, make the viewer expand
-    // instead of having its own scroll. This allows stacking multiple viewers vertically.
-    if (useExternalScroll && this.viewer && this.viewer.container) {
-      try {
-        // Remove internal scrolling behavior and let the outer container scroll.
-        // We force the viewer container to expand with content.
-        const vc = this.viewer.container as HTMLElement;
-        vc.style.overflow = "visible";
-        vc.style.height = "auto";
-        // Ensure the inner viewer (pdfViewer) does not set its own height/overflow
-        // PDF.js might add another internal element with class "pdfViewer" — ensure it's visible.
-        const inner = vc.querySelector(".pdfViewer") as HTMLElement | null;
-        if (inner) {
-          inner.style.overflow = "visible";
-          inner.style.height = "auto";
-        }
-      } catch (e) {
-        // not critical — fail silently if DOM shape differs
-        // console.warn("useExternalScroll adjustments failed", e);
-      }
     }
   };
 
@@ -584,7 +551,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
   handleScaleValue = () => {
     if (this.viewer) {
-      this.viewer.currentScaleValue = this.props.pdfScaleValue; //"page-width";
+      this.viewer.currentScaleValue = this.props.pdfScaleValue;
     }
   };
 
@@ -678,7 +645,6 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     const { pdfDocument } = this.props;
     for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
       const highlightRoot = this.highlightRoots[pageNumber];
-      /** Need to check if container is still attached to the DOM as PDF.js can unload pages. */
       if (highlightRoot?.container.isConnected) {
         this.renderHighlightLayer(highlightRoot.reactRoot, pageNumber);
       } else {
