@@ -44,11 +44,6 @@ const HighlightPopup = ({ comment }) =>
     </div>
   ) : null;
 
-const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
-const SECONDARY_PDF_URL = "https://arxiv.org/pdf/1604.02480";
-const NEW_PDF_URL =
-  "/react-pdf-highlighter/hernandez_jose_-_el_gaucho_martin_fierro.pdf";
-
 export function App() {
   const searchParams = new URLSearchParams(document.location.search);
   const initialUrl = searchParams.get("url") || CLIENT_PDF_URLS[0];
@@ -145,6 +140,12 @@ export function App() {
 
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // ref al container que maneja pdf.js (el que tiene scrollTop)
+  const pdfScrollRef = useRef<HTMLElement | null>(null);
+
+  // pending scroll: "top" | "bottom" o null -> aplicado cuando el viewer esté listo
+  const pendingScrollPositionRef = useRef<"top" | "bottom" | null>(null);
+
   const fadeDuration = 250;
 
   const doTransition = (newIndex: number, scrollPosition: "top" | "bottom") => {
@@ -152,28 +153,20 @@ export function App() {
     if (!container) return;
 
     isTransitioningRef.current = true;
+
+    // indicar la intención de scroll al nuevo viewer
+    pendingScrollPositionRef.current = scrollPosition;
+
+    // animación visual: fade out
     container.classList.add("pdf-hidden");
 
+    // cambiar documento después de la animación
     setTimeout(() => {
       setCurrentIndex(newIndex);
       setUrl(CLIENT_PDF_URLS[newIndex]);
 
-      requestAnimationFrame(() => {
-        if (scrollPosition === "top") {
-          container.scrollTop = 0;
-        } else {
-          container.scrollTop = container.scrollHeight - container.clientHeight;
-        }
-
-        // esperar 1 frame para asegurar que el DOM re-renderizó
-        requestAnimationFrame(() => {
-          container.classList.remove("pdf-hidden");
-
-          setTimeout(() => {
-            isTransitioningRef.current = false;
-          }, fadeDuration);
-        });
-      });
+      // NO intentamos setear el scroll aquí: esperamos a que scrollRef nos entregue el viewerContainer
+      // De todas formas como suavizado, sacamos el fade-in cuando el viewer aplique el scroll.
     }, fadeDuration);
   };
 
@@ -219,8 +212,47 @@ export function App() {
                 enableAreaSelection={(event) => event.altKey}
                 onScrollChange={resetHash}
                 scrollRef={(scrollTo, viewerContainer) => {
+                  // Guardamos el scroll container actual
+                  pdfScrollRef.current = viewerContainer;
                   scrollViewerTo.current = scrollTo;
 
+                  // si tenemos una intención pendiente (top/bottom), aplicarla ahora que el viewer está disponible
+                  if (pendingScrollPositionRef.current && viewerContainer) {
+                    const desired = pendingScrollPositionRef.current;
+                    // pequeña espera + raf para dejar que pdf.js calcule scrollHeight
+                    requestAnimationFrame(() => {
+                      // un timeout corto asegura que las páginas hayan renderizado (ajustar si es necesario)
+                      setTimeout(() => {
+                        if (!viewerContainer) return;
+
+                        if (desired === "top") {
+                          viewerContainer.scrollTop = 0;
+                        } else {
+                          // ir al final del viewer (final del documento)
+                          viewerContainer.scrollTop =
+                            viewerContainer.scrollHeight -
+                            viewerContainer.clientHeight;
+                        }
+
+                        // limpiar pending
+                        pendingScrollPositionRef.current = null;
+
+                        // fade-in visual: quitar clase y resetear isTransitioning despues del fadeDuration
+                        const container = containerRef.current;
+                        if (container) {
+                          // Forzamos un reflow mínimo para que la transición sea reconocida
+                          requestAnimationFrame(() => {
+                            container.classList.remove("pdf-hidden");
+                            setTimeout(() => {
+                              isTransitioningRef.current = false;
+                            }, fadeDuration);
+                          });
+                        }
+                      }, 40); // 40ms suele ser suficiente; aumentá si tenés PDFs muy pesados
+                    });
+                  }
+
+                  // add scroll listener to detect top/bottom
                   const handleScroll = () => {
                     const isBottom =
                       viewerContainer.scrollTop +
@@ -237,6 +269,8 @@ export function App() {
                     }
                   };
 
+                  // remove previous listener if present (avoid duplicates)
+                  // Note: to be safe tendrías que guardar la referencia al handler y removerla
                   viewerContainer.addEventListener("scroll", handleScroll);
                 }}
                 onSelectionFinished={(
