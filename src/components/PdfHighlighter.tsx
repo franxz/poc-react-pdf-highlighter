@@ -1,3 +1,4 @@
+// PdfHighlighter.tsx
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { EventBus, PDFViewer } from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import type { PDFViewerOptions } from "pdfjs-dist/types/web/pdf_viewer";
@@ -57,26 +58,33 @@ interface Props<T_HT> {
     index: number,
     setTip: (
       highlight: T_ViewportHighlight<T_HT>,
-      callback: (highlight: T_ViewportHighlight<T_HT>) => JSX.Element,
+      callback: (highlight: T_ViewportHighlight<T_HT>) => JSX.Element
     ) => void,
     hideTip: () => void,
     viewportToScaled: (rect: LTWHP) => Scaled,
     screenshot: (position: LTWH) => string,
-    isScrolledTo: boolean,
+    isScrolledTo: boolean
   ) => JSX.Element;
   highlights: Array<T_HT>;
   onScrollChange: () => void;
-  scrollRef: (scrollTo: (highlight: T_HT) => void) => void;
+  // scrollRef now receives viewer container too (we already call it)
+  scrollRef: (
+    scrollTo: (highlight: T_HT) => void,
+    viewerContainer?: HTMLElement
+  ) => void;
   pdfDocument: PDFDocumentProxy;
   pdfScaleValue: string;
   onSelectionFinished: (
     position: ScaledPosition,
     content: { text?: string; image?: string },
     hideTipAndSelection: () => void,
-    transformSelection: () => void,
+    transformSelection: () => void
   ) => JSX.Element | null;
   enableAreaSelection: (event: MouseEvent) => boolean;
   pdfViewerOptions?: PDFViewerOptions;
+  // NEW: if true, the viewer container will be allowed to expand and the outer
+  // container (your App) will be used for scrolling — this enables stacking PDFs.
+  useExternalScroll?: boolean;
 }
 
 const EMPTY_ID = "empty-id";
@@ -143,7 +151,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
         doc.removeEventListener("keydown", this.handleKeyDown);
         doc.defaultView?.removeEventListener(
           "resize",
-          this.debouncedScaleValue,
+          this.debouncedScaleValue
         );
         if (observer) observer.disconnect();
       };
@@ -179,7 +187,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       new pdfjs.PDFViewer({
         container: this.containerNodeRef.current,
         eventBus: eventBus,
-        // enhanceTextSelection: true, // deprecated. https://github.com/mozilla/pdf.js/issues/9943#issuecomment-409369485
+        // enhanceTextSelection: true, // deprecated.
         textLayerMode: 2,
         removePageBorders: true,
         linkService: linkService,
@@ -207,7 +215,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     return findOrCreateContainerLayer(
       textLayer.div,
       `PdfHighlighter__highlight-layer ${styles.highlightLayer}`,
-      ".PdfHighlighter__highlight-layer",
+      ".PdfHighlighter__highlight-layer"
     );
   }
 
@@ -217,7 +225,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     const { ghostHighlight } = this.state;
 
     const allHighlights = [...highlights, ghostHighlight].filter(
-      Boolean,
+      Boolean
     ) as T_HT[];
 
     const pageNumbers = new Set<number>();
@@ -286,7 +294,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     return {
       boundingRect: scaledToViewport(boundingRect, viewport, usePdfCoordinates),
       rects: (rects || []).map((rect) =>
-        scaledToViewport(rect, viewport, usePdfCoordinates),
+        scaledToViewport(rect, viewport, usePdfCoordinates)
       ),
       pageNumber,
     };
@@ -319,7 +327,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     });
 
     this.setState({ ghostHighlight: null, tip: null }, () =>
-      this.renderHighlightLayers(),
+      this.renderHighlightLayers()
     );
   };
 
@@ -392,7 +400,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
         ...pageViewport.convertToPdfPoint(
           0,
           scaledToViewport(boundingRect, pageViewport, usePdfCoordinates).top -
-            scrollMargin,
+            scrollMargin
         ),
         0,
       ],
@@ -402,7 +410,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       {
         scrolledToHighlightId: highlight.id,
       },
-      () => this.renderHighlightLayers(),
+      () => this.renderHighlightLayers()
     );
 
     // wait for scrolling to finish
@@ -412,11 +420,39 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
   };
 
   onDocumentReady = () => {
-    const { scrollRef } = this.props;
+    const { scrollRef, useExternalScroll } = this.props;
 
     this.handleScaleValue();
 
-    scrollRef(this.scrollTo);
+    // 👉 Parche para exponer el contenedor real del scroll
+    if (scrollRef) {
+      // NOTE: we pass the viewer.container as second arg, so callers can decide what to do.
+      // (Your App uses sentinels on the outer container instead of viewer scroll,
+      //  but having this allows hash->scrollTo to work.)
+      scrollRef(this.scrollTo, this.viewer.container);
+    }
+
+    // If user asked to use the outer container for scrolling, make the viewer expand
+    // instead of having its own scroll. This allows stacking multiple viewers vertically.
+    if (useExternalScroll && this.viewer && this.viewer.container) {
+      try {
+        // Remove internal scrolling behavior and let the outer container scroll.
+        // We force the viewer container to expand with content.
+        const vc = this.viewer.container as HTMLElement;
+        vc.style.overflow = "visible";
+        vc.style.height = "auto";
+        // Ensure the inner viewer (pdfViewer) does not set its own height/overflow
+        // PDF.js might add another internal element with class "pdfViewer" — ensure it's visible.
+        const inner = vc.querySelector(".pdfViewer") as HTMLElement | null;
+        if (inner) {
+          inner.style.overflow = "visible";
+          inner.style.height = "auto";
+        }
+      } catch (e) {
+        // not critical — fail silently if DOM shape differs
+        // console.warn("useExternalScroll adjustments failed", e);
+      }
+    }
   };
 
   onSelectionChange = () => {
@@ -462,7 +498,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       {
         scrolledToHighlightId: EMPTY_ID,
       },
-      () => this.renderHighlightLayers(),
+      () => this.renderHighlightLayers()
     );
 
     this.viewer.container.removeEventListener("scroll", this.onScroll);
@@ -531,9 +567,9 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
             {
               ghostHighlight: { position: scaledPosition },
             },
-            () => this.renderHighlightLayers(),
-          ),
-      ),
+            () => this.renderHighlightLayers()
+          )
+      )
     );
   };
 
@@ -604,7 +640,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
                 const image = this.screenshot(
                   pageBoundingRect,
-                  pageBoundingRect.pageNumber,
+                  pageBoundingRect.pageNumber
                 );
 
                 this.setTip(
@@ -625,10 +661,10 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
                         () => {
                           resetSelection();
                           this.renderHighlightLayers();
-                        },
+                        }
                       );
-                    },
-                  ),
+                    }
+                  )
                 );
               }}
             />
@@ -677,7 +713,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
         setTip={(tip) => {
           this.setState({ tip });
         }}
-      />,
+      />
     );
   }
 }
